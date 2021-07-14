@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import CSClient from '../utils/csClient'
 import FormCreateConversation from '../components/FormCreateConversation'
 import FormJoinConversation from '../components/FormJoinConversation'
+import FormWhatsAppTextConversation from '../components/FormWhatsAppTextConversation'
+import FormGetMyConversationMember from '../components/FormGetMyConversationMember'
 import FormEnableAudioInConversations from '../components/FormEnableAudioInConversations'
 import Audio from '../components/Audio'
 import createRtcAudioConnection from '../utils/createRtcAudioConnection'
@@ -36,6 +38,7 @@ function LoggedPage(props) {
     const lastCSClientEvent = useCSClientEvents(csClient)
     const [eventsHistory, setEvents] = useState([])
     const [myConversationsState, setMyConversationsState] = useState([])
+    const [myMemberState, setMyMemberState] = useState("")
     const [conversationsEvents, setConversationsEvents] = useState({})
 
     // useCSClientEvents
@@ -117,8 +120,24 @@ function LoggedPage(props) {
                 const conversations = event.response.data._embedded.conversations
                 setMyConversationsState(conversations)
             }
+        })
 
-            
+        csClient.onRequestEnd(async (event) => {
+            const url = event.request.url
+            if (url.includes("/events") ) {
+                console.log("EVENTS RESPONSE", event.response)
+                const events = event.response.data._embedded.events
+                setConversationsEvents(events)
+            }
+        })
+
+        csClient.onRequestEnd(async (event) => {
+            const url = event.request.url
+            if (url.includes("/me") ) {
+                console.log("ME RESPONSE", event.response)
+                const member = event.response.data.id
+                setMyMemberState(member)
+            }
         })
 
     }, [audioState])
@@ -212,6 +231,43 @@ function LoggedPage(props) {
         })
     }
 
+    const getMyConversationMember = async (data) => {
+        const { conversation_id } = data
+        await csClient.request({
+            url: `/v0.3/conversations/${conversation_id}/members/me`,
+            method: "get"
+        })
+        await csClient.request({
+            url: `/v0.3/conversations/${conversation_id}/events`,
+            method: "get"
+        })
+    }
+
+    const getConversationEvents = async (data) => {
+        const { conversation_id } = data
+        await csClient.request({
+            url: `/v0.3/conversations/${conversation_id}/events`,
+            method: "get"
+        })
+    }
+
+    const sendTextToConversation = async (data) => {
+        const { conversation_id, text } = data
+        const member = myMemberState;
+        await csClient.request({
+            url: `/v0.3/conversations/${conversation_id}/events`,
+            method: "post",
+            data: {
+                type: 'text',
+                cid: conversation_id,
+                from: member,
+                body: {
+                  text
+                }
+              }
+            });   
+        }
+
     
     return (
         <div className="App">
@@ -223,6 +279,13 @@ function LoggedPage(props) {
                 <FormJoinConversation onSubmit={onJoinConversationSubmit} />
                 <h2>Get My Conversations</h2>
                 <button onClick={getMyConversations} >Get My Conversations</button>
+                <h2>Get Conversation</h2>
+                <FormGetMyConversationMember onSubmit={getMyConversationMember} />
+                <h2>Text To Conversation</h2>
+                <FormWhatsAppTextConversation 
+                    onSubmit={sendTextToConversation} 
+                    events={conversationsEvents}
+                />
                 <h2>Enable Audio In Conversations</h2>
                 <FormEnableAudioInConversations onSubmit={onEnableAudioInConversationSubmit} />
                 <Audio srcObject={audioState.audioSrcObject} />
